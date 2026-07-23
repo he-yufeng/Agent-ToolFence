@@ -69,6 +69,28 @@ def classify(text: str, step: str = "") -> tuple[str, str]:
         return "runner_memory", "The runner likely ran out of memory."
     if any(token in haystack for token in ("timed out", "timeout", "cancelled after")):
         return "flaky_timeout", "The failing step timed out or behaved like a flaky run."
+    if any(
+        token in haystack
+        for token in (
+            "failed to restore cache",
+            "not look like a tar archive",
+            "checksum mismatch",
+            "cache corrupted",
+            "unable to reserve cache",
+        )
+    ):
+        return (
+            "cache_corruption",
+            "The CI cache restore or reserve step failed; rerun or drop the cache.",
+        )
+    if any(
+        token in haystack
+        for token in ("flaky", "flakefinder", "passed on retry", "tests failed, then passed")
+    ):
+        return (
+            "flaky_retry",
+            "The failure looks flaky and may pass on rerun; rerun before digging.",
+        )
     if any(token in haystack for token in ("pip install", "could not find a version", "npm err!")):
         return "dependency_install", "A dependency install or package resolution step failed."
     if any(

@@ -92,7 +92,13 @@ def to_pr_comment(analysis: Analysis) -> str:
         "I checked the CI failure and the first actionable signal looks like this:\n\n"
         f"{_comment_for_failure(first)}\n"
     )
-    if first.category in {"permission_gate", "network_external_service", "runner_disk"}:
+    if first.category in {
+        "permission_gate",
+        "network_external_service",
+        "runner_disk",
+        "flaky_retry",
+        "cache_corruption",
+    }:
         return base + (
             "I will treat this as external/CI-gated unless the rerun shows a code failure."
         )

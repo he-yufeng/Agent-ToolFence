@@ -124,3 +124,35 @@ def test_extract_command_keeps_runner_prefix() -> None:
     )
     # the more specific `python -m pytest` form is still preserved in full
     assert extract_command(_line("python -m pytest tests/")) == "python -m pytest tests/"
+
+
+def test_classifies_cache_corruption(tmp_path: Path) -> None:
+    log = tmp_path / "cache.log"
+    log.write_text(
+        "test\tCache\t2026-06-14T00:00:00Z\t##[group]Restore node_modules cache\n"
+        "test\tCache\t2026-06-14T00:00:01Z\tFailed to restore cache entry. "
+        "tar: this does not look like a tar archive\n"
+        "test\tCache\t2026-06-14T00:00:02Z\t##[error]Process completed with exit code 1.\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_paths([log])
+
+    assert analysis.failures[0].category == "cache_corruption"
+    assert "cache" in analysis.failures[0].advice.lower()
+    assert "external/CI-gated" in to_pr_comment(analysis)
+
+
+def test_classifies_flaky_retry(tmp_path: Path) -> None:
+    log = tmp_path / "flaky.log"
+    log.write_text(
+        "test\tRun tests\t2026-06-14T00:00:00Z\t##[group]Run pytest\n"
+        "test\tRun tests\t2026-06-14T00:00:01Z\t2 failed, 41 passed, 1 flaky in 31.2s\n"
+        "test\tRun tests\t2026-06-14T00:00:02Z\t##[error]Process completed with exit code 1.\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_paths([log])
+
+    assert analysis.failures[0].category == "flaky_retry"
+    assert "external/CI-gated" in to_pr_comment(analysis)
