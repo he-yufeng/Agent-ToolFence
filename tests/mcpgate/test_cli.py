@@ -51,3 +51,40 @@ def test_cli_can_fail_on_warnings() -> None:
 
     assert result.exit_code == 1
     assert "no_tools" in result.output
+
+
+def test_cli_rejects_command_and_url_together() -> None:
+    result = CliRunner().invoke(
+        cli,
+        ["check", "--command", "x", "--url", "http://127.0.0.1:1/mcp"],
+    )
+
+    assert result.exit_code != 0
+    assert "exactly one" in result.output
+
+
+def test_cli_requires_a_target() -> None:
+    result = CliRunner().invoke(cli, ["check"])
+
+    assert result.exit_code != 0
+    assert "exactly one" in result.output
+
+
+def test_cli_rejects_malformed_header() -> None:
+    result = CliRunner().invoke(
+        cli,
+        ["check", "--url", "http://127.0.0.1:1/mcp", "--header", "no-colon"],
+    )
+
+    assert result.exit_code != 0
+    assert "Name: value" in result.output
+
+
+def test_cli_rejects_header_without_url() -> None:
+    result = CliRunner().invoke(
+        cli,
+        ["check", "--command", "x", "--header", "Authorization: Bearer t"],
+    )
+
+    assert result.exit_code != 0
+    assert "--url" in result.output

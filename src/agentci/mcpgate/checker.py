@@ -1,18 +1,30 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import os
 import shlex
 import tempfile
 import time
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from typing import Any, TextIO
+from urllib.parse import urlsplit, urlunsplit
 
+import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from .secrets import scan_text
+
+try:
+    from mcp.client.streamable_http import streamable_http_client as _http_transport
+except ImportError:  # older mcp only has the old spelling
+    from mcp.client.streamable_http import streamablehttp_client as _http_transport
+
+# renamed in newer mcp: caller owns the httpx client instead of passing headers
+_TRANSPORT_TAKES_HTTP_CLIENT = "http_client" in inspect.signature(_http_transport).parameters
 
 
 @dataclass(frozen=True)
@@ -120,7 +132,6 @@ async def check_stdio_server(command_line: str, timeout: float = 20.0) -> CheckR
 
 async def _check_stdio_server(command_line: str, errlog: TextIO) -> CheckResult:
     params = _server_params(command_line)
-    findings: list[Finding] = []
 
     async with stdio_client(params, errlog=errlog) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
@@ -130,6 +141,93 @@ async def _check_stdio_server(command_line: str, errlog: TextIO) -> CheckResult:
     stderr_text = _read_errlog(errlog)
     tools = [_summarize_tool(tool) for tool in getattr(tools_result, "tools", [])]
 
+    findings = _evaluate_tools(tools)
+    findings.extend(_scan_observed_data(tools, stderr_text))
+
+    return CheckResult(
+        command=command_line,
+        status=_status_for(findings),
+        duration_ms=0,
+        tools=tools,
+        findings=findings,
+        stderr_tail=_tail(stderr_text),
+    )
+
+
+async def check_http_server(
+    url: str,
+    headers: dict[str, str] | None = None,
+    timeout: float = 20.0,
+) -> CheckResult:
+    started = time.monotonic()
+    display_url = _display_url(url)
+    try:
+        result = await asyncio.wait_for(
+            _check_http_server(url, headers, display_url),
+            timeout=timeout,
+        )
+    except TimeoutError:
+        result = _timeout_result(display_url, timeout, started, None)
+    except Exception as exc:
+        if _elapsed_ms(started) >= int(timeout * 1000):
+            result = _timeout_result(display_url, timeout, started, None)
+        else:
+            result = CheckResult(
+                command=display_url,
+                status="failed",
+                duration_ms=_elapsed_ms(started),
+                findings=[
+                    Finding(
+                        code="server_error",
+                        severity="error",
+                        message=f"MCP server check failed: {exc}",
+                    )
+                ],
+            )
+
+    result.duration_ms = _elapsed_ms(started)
+    return result
+
+
+async def _check_http_server(
+    url: str,
+    headers: dict[str, str] | None,
+    display_url: str,
+) -> CheckResult:
+    if _TRANSPORT_TAKES_HTTP_CLIENT:
+        # no per-request timeout here, the outer wait_for is the only clock
+        async with httpx.AsyncClient(
+            headers=headers or {},
+            follow_redirects=True,
+            timeout=httpx.Timeout(None),
+        ) as http_client:
+            tools_result = await _list_tools(_http_transport(url, http_client=http_client))
+    else:
+        tools_result = await _list_tools(_http_transport(url, headers=headers or {}))
+
+    tools = [_summarize_tool(tool) for tool in getattr(tools_result, "tools", [])]
+
+    findings = _evaluate_tools(tools)
+    findings.extend(_scan_observed_data(tools, ""))
+
+    return CheckResult(
+        command=display_url,
+        status=_status_for(findings),
+        duration_ms=0,
+        tools=tools,
+        findings=findings,
+    )
+
+
+async def _list_tools(transport_cm: AbstractAsyncContextManager[Any]) -> Any:
+    async with transport_cm as (read_stream, write_stream, _):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            return await session.list_tools()
+
+
+def _evaluate_tools(tools: list[ToolSummary]) -> list[Finding]:
+    findings: list[Finding] = []
     if not tools:
         findings.append(
             Finding(
@@ -157,22 +255,23 @@ async def _check_stdio_server(command_line: str, errlog: TextIO) -> CheckResult:
                     target=tool.name,
                 )
             )
+    return findings
 
-    for finding in _scan_observed_data(tools, stderr_text):
-        findings.append(finding)
 
-    status = "failed" if any(f.severity == "error" for f in findings) else "passed"
-    if status == "passed" and any(f.severity == "warning" for f in findings):
-        status = "warning"
+def _status_for(findings: list[Finding]) -> str:
+    if any(f.severity == "error" for f in findings):
+        return "failed"
+    if any(f.severity == "warning" for f in findings):
+        return "warning"
+    return "passed"
 
-    return CheckResult(
-        command=command_line,
-        status=status,
-        duration_ms=0,
-        tools=tools,
-        findings=findings,
-        stderr_tail=_tail(stderr_text),
-    )
+
+def _display_url(url: str) -> str:
+    # tokens ride in query strings, keep them out of reports
+    parts = urlsplit(url)
+    if not parts.query and not parts.fragment:
+        return url
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
 def _server_params(command_line: str) -> StdioServerParameters:
@@ -236,7 +335,7 @@ def _timeout_result(
     command_line: str,
     timeout: float,
     started: float,
-    errlog: TextIO,
+    errlog: TextIO | None,
 ) -> CheckResult:
     return CheckResult(
         command=command_line,
@@ -249,7 +348,7 @@ def _timeout_result(
                 message=f"MCP server did not complete the handshake within {timeout:g}s.",
             )
         ],
-        stderr_tail=_tail(_read_errlog(errlog)),
+        stderr_tail=_tail(_read_errlog(errlog)) if errlog is not None else "",
     )
 
 

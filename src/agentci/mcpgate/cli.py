@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
-from .checker import CheckResult, check_stdio_server
+from .checker import CheckResult, check_http_server, check_stdio_server
 from .report import write_json_report, write_markdown_report
 
 
@@ -22,23 +22,40 @@ def cli() -> None:
 @click.option(
     "--command",
     "command_line",
-    required=True,
     help="Command that starts a stdio MCP server.",
+)
+@click.option("--url", help="Streamable HTTP URL of a remote MCP server.")
+@click.option(
+    "--header",
+    "header_values",
+    multiple=True,
+    help="HTTP header as 'Name: value', repeatable. Only used with --url.",
 )
 @click.option("--timeout", type=float, default=20.0, show_default=True, help="Handshake timeout.")
 @click.option("--report", type=click.Path(path_type=Path), help="Write a Markdown report.")
 @click.option("--json", "json_path", type=click.Path(path_type=Path), help="Write a JSON report.")
 @click.option("--fail-on-warn", is_flag=True, help="Return a non-zero exit code on warnings.")
 def check(
-    command_line: str,
+    command_line: str | None,
+    url: str | None,
+    header_values: tuple[str, ...],
     timeout: float,
     report: Path | None,
     json_path: Path | None,
     fail_on_warn: bool,
 ) -> None:
-    """Check a stdio MCP server."""
+    """Check an MCP server over stdio or streamable HTTP."""
 
-    result = asyncio.run(check_stdio_server(command_line, timeout=timeout))
+    if bool(command_line) == bool(url):
+        raise click.UsageError("pass exactly one of --command or --url")
+    if header_values and not url:
+        raise click.UsageError("--header only makes sense with --url")
+
+    if command_line:
+        result = asyncio.run(check_stdio_server(command_line, timeout=timeout))
+    else:
+        headers = _parse_headers(header_values)
+        result = asyncio.run(check_http_server(url, headers=headers, timeout=timeout))
 
     if report:
         write_markdown_report(result, report)
@@ -49,6 +66,16 @@ def check(
 
     if result.failed or (fail_on_warn and result.warned):
         raise click.exceptions.Exit(1)
+
+
+def _parse_headers(values: tuple[str, ...]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for value in values:
+        name, sep, header_value = value.partition(":")
+        if not sep or not name.strip():
+            raise click.UsageError(f"--header expects 'Name: value', got {value!r}")
+        headers[name.strip()] = header_value.strip()
+    return headers
 
 
 def _print_result(result: CheckResult) -> None:

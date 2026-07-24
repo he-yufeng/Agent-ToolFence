@@ -74,10 +74,7 @@ agentci patch-context from-diff --repo . --base main --format json
 
 ## mcp-gate
 
-Stop shipping broken MCP servers. `mcp-gate` starts a stdio MCP server, runs the client handshake,
-lists tools, checks the tool contract shape, scans observed metadata and stderr for obvious secret
-leaks, and writes Markdown/JSON reports that fit into GitHub Actions. It exits non-zero when a
-required check fails, so a pull request fails before a broken server lands.
+Stop shipping broken MCP servers. `mcp-gate` runs the client handshake against a stdio command or a remote streamable-HTTP URL, lists tools, checks the tool contract shape, scans observed metadata and stderr for obvious secret leaks, and writes Markdown/JSON reports that fit into GitHub Actions. It exits non-zero when a required check fails, so a pull request fails before a broken server lands.
 
 ```bash
 agentci mcp-gate check \
@@ -87,6 +84,14 @@ agentci mcp-gate check \
 ```
 
 Use `--fail-on-warn` if warnings should also fail CI.
+
+Remote servers are checked over streamable HTTP. URL query strings are stripped from reports, so a token in the URL never lands in CI artifacts.
+
+```bash
+agentci mcp-gate check \
+  --url https://example.com/mcp \
+  --header "Authorization: Bearer $TOKEN"
+```
 
 ## mcp-replay
 
@@ -140,7 +145,7 @@ Inputs: `tool` (required), `args` (passed through), `package` (pip spec, default
 The five tools are stable and tested; the work now is widening coverage and making the evidence easier to wire into a real pipeline:
 
 - **A ready-made GitHub Action** — a single composite action that runs `mcp-gate` / `tool-fence` on a PR and posts the report as a comment, so adoption is a few lines of YAML instead of a hand-written workflow.
-- **Streamable-HTTP MCP servers** — `mcp-gate` and `mcp-replay` speak stdio today; the HTTP transport is the obvious next surface as more servers ship that way.
+- **Streamable-HTTP for `mcp-replay`** — `mcp-gate` already checks remote servers over streamable HTTP; recording and replaying that transport is the next surface as more servers ship that way.
 - **Richer CI-log classifiers** — `ci-repro` recognises the common failure shapes (real regression, permission gate, network limit, dependency install, local test); the long tail (flaky-retry markers, OOM kills, cache corruption) is worth teaching it next.
 - **A shared evidence bundle** — let the tools emit one combined, redacted artifact (CI repro + MCP transcript + tool-fence verdict) that a maintainer can read in one place.
 

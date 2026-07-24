@@ -60,7 +60,7 @@ agentci patch-context from-diff --repo . --base main --format json
 
 ## mcp-gate
 
-别再把坏掉的 MCP 服务器发出去。`mcp-gate` 启动一个 stdio MCP 服务器，跑客户端握手、列工具、校验工具契约形状、扫描可见的元数据和 stderr 里有没有泄露密钥，并写出能接进 GitHub Actions 的 Markdown/JSON 报告。必需检查不过时返回非零退出码，于是 PR 会在坏服务器落地前先失败。
+别再把坏掉的 MCP 服务器发出去。`mcp-gate` 可以对一条 stdio 命令或一个远程 streamable-HTTP 地址跑客户端握手、列工具、校验工具契约形状、扫描可见的元数据和 stderr 里有没有泄露密钥，并写出能接进 GitHub Actions 的 Markdown/JSON 报告。必需检查不过时返回非零退出码，于是 PR 会在坏服务器落地前先失败。
 
 ```bash
 agentci mcp-gate check \
@@ -70,6 +70,14 @@ agentci mcp-gate check \
 ```
 
 需要警告也让 CI 失败时加 `--fail-on-warn`。
+
+远程服务器走 streamable HTTP 检查。报告里会剥掉 URL 的 query 部分，URL 里带的 token 不会落进 CI 产物。
+
+```bash
+agentci mcp-gate check \
+  --url https://example.com/mcp \
+  --header "Authorization: Bearer $TOKEN"
+```
 
 ## mcp-replay
 
@@ -116,7 +124,7 @@ agentci tool-fence run tests/toolfence --markdown
 五个工具本身已经稳定、有测试覆盖，接下来的重点是扩大覆盖面、让产出的证据更容易接进真实流水线：
 
 - **开箱即用的 GitHub Action**：一个 composite action，在 PR 上跑 `mcp-gate` / `tool-fence` 并把报告贴成评论，接入只需几行 YAML，而不是手写整套 workflow。
-- **支持 Streamable-HTTP 的 MCP 服务器**：`mcp-gate` 和 `mcp-replay` 目前走 stdio，随着越来越多服务器改用 HTTP 传输，这是最该补的下一块。
+- **mcp-replay 支持 Streamable-HTTP**：`mcp-gate` 已经能检查远程 HTTP 服务器，随着越来越多服务器改用 HTTP 传输，record/replay 覆盖这个传输是下一块。
 - **更丰富的 CI 日志分类器**：`ci-repro` 已经能识别常见失败形态（真回归、权限门、网络限制、依赖安装、本地测试失败），接下来值得教它认长尾情况（flaky 重试标记、OOM 被杀、缓存损坏）。
 - **统一的证据包**：让这几个工具能输出一份合并、脱敏后的产物（CI 复现 + MCP transcript + tool-fence 结论），维护者在一个地方就能读完。
 
