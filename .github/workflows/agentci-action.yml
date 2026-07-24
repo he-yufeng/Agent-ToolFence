@@ -1,0 +1,44 @@
+name: agentcikit action self-test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Dogfood the composite action from this checkout.
+      - name: tool-fence passes on the clean fixtures
+        uses: ./
+        with:
+          tool: tool-fence
+          package: .
+          args: run examples/toolfence/read-only-ok.yaml examples/toolfence/confirmed-write.yaml --output /tmp/fence-results.json
+          comment: "true"
+
+      # The blocked-shell fixture is a negative demo: the gate must fire on it.
+      - name: tool-fence fires on the unsafe transcript
+        uses: ./
+        continue-on-error: true
+        with:
+          tool: tool-fence
+          package: .
+          args: run examples/toolfence/blocked-shell.yaml --output /tmp/fence-blocked.json
+          comment: "true"
+
+      - name: ci-repro on a sample failing log
+        uses: ./
+        with:
+          tool: ci-repro
+          package: .
+          args: plan tests/cirepro/fixtures/pytest_failure.log
+          comment: "false"

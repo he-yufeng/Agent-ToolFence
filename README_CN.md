@@ -91,6 +91,26 @@ agentci tool-fence init                 # 写出起步 fixture
 agentci tool-fence run tests/toolfence --markdown
 ```
 
+## GitHub Action
+
+仓库自带一个 composite action，一行就能把整套工具接进 workflow：选一个工具跑起来，报告自动贴在 PR 评论里（重复跑会更新同一条）。
+
+```yaml
+- uses: he-yufeng/agentcikit@main
+  with:
+    tool: tool-fence                 # 或 mcp-gate / ci-repro
+    args: run fixtures/ --output /tmp/results.json
+```
+
+```yaml
+- uses: he-yufeng/agentcikit@main
+  with:
+    tool: mcp-gate
+    args: node server.js
+```
+
+输入项：`tool`（必填）、`args`（原样透传）、`package`（pip 安装规格，默认 `agentcikit`）、`python-version`（默认 `3.12`）、`comment`（是否贴报告，默认 `true`）、`github-token`。本仓库在 `.github/workflows/agentci-action.yml` 里自用验证。
+
 ## 后续规划
 
 五个工具本身已经稳定、有测试覆盖，接下来的重点是扩大覆盖面、让产出的证据更容易接进真实流水线：

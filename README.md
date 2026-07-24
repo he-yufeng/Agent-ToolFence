@@ -115,6 +115,26 @@ agentci tool-fence init                 # write starter fixtures
 agentci tool-fence run tests/toolfence --markdown
 ```
 
+## GitHub Action
+
+Drop the suite into a workflow with the bundled composite action. It runs one tool and posts the report as a sticky PR comment:
+
+```yaml
+- uses: he-yufeng/agentcikit@main
+  with:
+    tool: tool-fence                 # or mcp-gate / ci-repro
+    args: run fixtures/ --output /tmp/results.json
+```
+
+```yaml
+- uses: he-yufeng/agentcikit@main
+  with:
+    tool: mcp-gate
+    args: node server.js
+```
+
+Inputs: `tool` (required), `args` (passed through), `package` (pip spec, default `agentcikit`), `python-version` (default `3.12`), `comment` (post the report, default `true`), `github-token`. The repo dogfoods it in `.github/workflows/agentci-action.yml`.
+
 ## Roadmap
 
 The five tools are stable and tested; the work now is widening coverage and making the evidence easier to wire into a real pipeline:
