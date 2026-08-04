@@ -82,6 +82,26 @@ def plan_cmd(paths: tuple[str, ...], fmt: str, out: str | None) -> None:
         console.print(to_markdown(analysis))
 
 
+@main.command("compare")
+@click.argument("before", type=click.Path(exists=True, dir_okay=False))
+@click.argument("after", type=click.Path(exists=True, dir_okay=False))
+@click.option("--format", "fmt", type=click.Choice(["md", "json"]), default="md")
+def compare_cmd(before: str, after: str, fmt: str) -> None:
+    """Diff two CI run logs: what is newly failing, what healed, what is pre-existing."""
+    from .analyze import analyze_paths
+    from .compare import compare_analyses, to_markdown as cmp_markdown
+
+    cmp_result = compare_analyses(analyze_paths([before]), analyze_paths([after]))
+    if fmt == "json":
+        console.print_json({
+            "new": [f.headline for f in cmp_result.new_failures],
+            "fixed": [f.headline for f in cmp_result.fixed_failures],
+            "still_failing": [f.headline for f in cmp_result.still_failing],
+        })
+    else:
+        console.print(cmp_markdown(cmp_result))
+
+
 @main.command("comment")
 @click.argument("paths", nargs=-1, required=True, type=click.Path(exists=True, dir_okay=False))
 @click.option("--pr", type=int, help="Pull request number for context.")

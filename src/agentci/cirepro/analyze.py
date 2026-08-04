@@ -11,9 +11,15 @@ from .parser import load_lines
 
 
 def _window(lines: list[LogLine], index: int, radius: int = 4) -> list[LogLine]:
-    start = max(index - radius, 0)
-    end = min(index + radius + 1, len(lines))
-    return lines[start:end]
+    # Evidence must stay inside the failure's own job/step: the next step's
+    # content (lint, docs) otherwise bleeds into the classification and the
+    # same failure can be judged differently depending on what follows it.
+    job, step = lines[index].job, lines[index].step
+    same_step = [i for i, line in enumerate(lines) if line.job == job and line.step == step]
+    position = same_step.index(index)
+    start = same_step[max(position - radius, 0)]
+    last = same_step[min(position + radius, len(same_step) - 1)]
+    return lines[start : last + 1]
 
 
 def _commands_by_step(lines: list[LogLine]) -> dict[tuple[str, str], list[str]]:

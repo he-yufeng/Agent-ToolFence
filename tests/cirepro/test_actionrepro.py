@@ -156,3 +156,56 @@ def test_classifies_flaky_retry(tmp_path: Path) -> None:
 
     assert analysis.failures[0].category == "flaky_retry"
     assert "external/CI-gated" in to_pr_comment(analysis)
+
+
+def _two_run_logs(tmp_path: Path) -> tuple[Path, Path]:
+    before = tmp_path / "before.log"
+    after = tmp_path / "after.log"
+    before.write_text(
+        "ci\tRun tests\t2026-08-04T00:00:00Z\t##[group]Run npm test\n"
+        "ci\tRun tests\t2026-08-04T00:00:00Z\tnpm test\n"
+        "ci\tRun tests\t2026-08-04T00:00:00Z\tFAIL test_auth.py::test_login - AssertionError: boom after 45s\n"
+        "ci\tRun tests\t2026-08-04T00:00:00Z\t##[error]Process completed with exit code 1.\n"
+        "ci\tLint\t2026-08-04T00:00:00Z\t##[group]Run ruff check\n"
+        "ci\tLint\t2026-08-04T00:00:00Z\truff check\n"
+        "ci\tLint\t2026-08-04T00:00:00Z\tsrc/old.py:1:1: E501 line too long\n"
+        "ci\tLint\t2026-08-04T00:00:00Z\t##[error]Process completed with exit code 1.\n",
+        encoding="utf-8",
+    )
+    after.write_text(
+        "ci\tRun tests\t2026-08-04T00:00:00Z\t##[group]Run npm test\n"
+        "ci\tRun tests\t2026-08-04T00:00:00Z\tnpm test\n"
+        "ci\tRun tests\t2026-08-04T00:00:00Z\tFAIL test_auth.py::test_login - AssertionError: boom after 51s\n"
+        "ci\tRun tests\t2026-08-04T00:00:00Z\t##[error]Process completed with exit code 1.\n"
+        "ci\tRun integration\t2026-08-04T00:00:00Z\t##[group]Run npm run integration\n"
+        "ci\tRun integration\t2026-08-04T00:00:00Z\tnpm run integration\n"
+        "ci\tRun integration\t2026-08-04T00:00:00Z\tFAIL test_pay.py::test_charge - KeyError: 'price'\n"
+        "ci\tRun integration\t2026-08-04T00:00:00Z\t##[error]Process completed with exit code 1.\n",
+        encoding="utf-8",
+    )
+    return before, after
+
+
+def test_compare_splits_new_fixed_and_preexisting(tmp_path: Path) -> None:
+    from agentci.cirepro.compare import compare_analyses
+
+    before, after = _two_run_logs(tmp_path)
+    cmp_result = compare_analyses(analyze_paths([before]), analyze_paths([after]))
+
+    new_headlines = [f.headline for f in cmp_result.new_failures]
+    assert any("test_charge" in h for h in new_headlines)
+    # the E501 lint failure is fixed in the after run; its headline is the
+    # generic ##[error] line, so assert on where it came from instead
+    assert any(f.category == "lint_or_typecheck" and f.step == "Lint" for f in cmp_result.fixed_failures)
+    # the login failure is the same failure with a different duration: still failing, not new
+    assert any("test_login" in f.headline for f in cmp_result.still_failing)
+
+
+def test_compare_cli_markdown(tmp_path: Path) -> None:
+    before, after = _two_run_logs(tmp_path)
+    result = CliRunner().invoke(main, ["compare", str(before), str(after)])
+
+    assert result.exit_code == 0, result.output
+    assert "## New failures" in result.output
+    assert "## Fixed" in result.output
+    assert "test_charge" in result.output
