@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Pin `mcp` below 2.0: the 2.0 major drops `mcp.server.fastmcp` and reshapes the transport stack, which broke the gate fixtures and the whole CLI on fresh installs. Migration to the 2.x API is tracked separately.
+
 ## 0.2.1
 
 - Declare `httpx` as a direct dependency: `mcp` 2.0 moved to `httpx2`, so fresh installs lost the transitive `httpx` and the CLI died at import with `ModuleNotFoundError`.
