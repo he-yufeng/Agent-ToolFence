@@ -94,11 +94,13 @@ def compare_cmd(before: str, after: str, fmt: str) -> None:
 
     cmp_result = compare_analyses(analyze_paths([before]), analyze_paths([after]))
     if fmt == "json":
-        console.print_json({
-            "new": [f.headline for f in cmp_result.new_failures],
-            "fixed": [f.headline for f in cmp_result.fixed_failures],
-            "still_failing": [f.headline for f in cmp_result.still_failing],
-        })
+        console.print_json(
+            {
+                "new": [f.headline for f in cmp_result.new_failures],
+                "fixed": [f.headline for f in cmp_result.fixed_failures],
+                "still_failing": [f.headline for f in cmp_result.still_failing],
+            }
+        )
     else:
         console.print(cmp_markdown(cmp_result))
 
