@@ -164,7 +164,8 @@ def _two_run_logs(tmp_path: Path) -> tuple[Path, Path]:
     before.write_text(
         "ci\tRun tests\t2026-08-04T00:00:00Z\t##[group]Run npm test\n"
         "ci\tRun tests\t2026-08-04T00:00:00Z\tnpm test\n"
-        "ci\tRun tests\t2026-08-04T00:00:00Z\tFAIL test_auth.py::test_login - AssertionError: boom after 45s\n"
+        "ci\tRun tests\t2026-08-04T00:00:00Z\t"
+        "FAIL test_auth.py::test_login - AssertionError: boom after 45s\n"
         "ci\tRun tests\t2026-08-04T00:00:00Z\t##[error]Process completed with exit code 1.\n"
         "ci\tLint\t2026-08-04T00:00:00Z\t##[group]Run ruff check\n"
         "ci\tLint\t2026-08-04T00:00:00Z\truff check\n"
@@ -175,11 +176,13 @@ def _two_run_logs(tmp_path: Path) -> tuple[Path, Path]:
     after.write_text(
         "ci\tRun tests\t2026-08-04T00:00:00Z\t##[group]Run npm test\n"
         "ci\tRun tests\t2026-08-04T00:00:00Z\tnpm test\n"
-        "ci\tRun tests\t2026-08-04T00:00:00Z\tFAIL test_auth.py::test_login - AssertionError: boom after 51s\n"
+        "ci\tRun tests\t2026-08-04T00:00:00Z\t"
+        "FAIL test_auth.py::test_login - AssertionError: boom after 51s\n"
         "ci\tRun tests\t2026-08-04T00:00:00Z\t##[error]Process completed with exit code 1.\n"
         "ci\tRun integration\t2026-08-04T00:00:00Z\t##[group]Run npm run integration\n"
         "ci\tRun integration\t2026-08-04T00:00:00Z\tnpm run integration\n"
-        "ci\tRun integration\t2026-08-04T00:00:00Z\tFAIL test_pay.py::test_charge - KeyError: 'price'\n"
+        "ci\tRun integration\t2026-08-04T00:00:00Z\t"
+        "FAIL test_pay.py::test_charge - KeyError: 'price'\n"
         "ci\tRun integration\t2026-08-04T00:00:00Z\t##[error]Process completed with exit code 1.\n",
         encoding="utf-8",
     )
@@ -196,7 +199,9 @@ def test_compare_splits_new_fixed_and_preexisting(tmp_path: Path) -> None:
     assert any("test_charge" in h for h in new_headlines)
     # the E501 lint failure is fixed in the after run; its headline is the
     # generic ##[error] line, so assert on where it came from instead
-    assert any(f.category == "lint_or_typecheck" and f.step == "Lint" for f in cmp_result.fixed_failures)
+    assert any(
+        f.category == "lint_or_typecheck" and f.step == "Lint" for f in cmp_result.fixed_failures
+    )
     # the login failure is the same failure with a different duration: still failing, not new
     assert any("test_login" in f.headline for f in cmp_result.still_failing)
 

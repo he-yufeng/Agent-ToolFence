@@ -89,7 +89,8 @@ def plan_cmd(paths: tuple[str, ...], fmt: str, out: str | None) -> None:
 def compare_cmd(before: str, after: str, fmt: str) -> None:
     """Diff two CI run logs: what is newly failing, what healed, what is pre-existing."""
     from .analyze import analyze_paths
-    from .compare import compare_analyses, to_markdown as cmp_markdown
+    from .compare import compare_analyses
+    from .compare import to_markdown as cmp_markdown
 
     cmp_result = compare_analyses(analyze_paths([before]), analyze_paths([after]))
     if fmt == "json":

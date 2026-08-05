@@ -49,7 +49,8 @@ def to_markdown(cmp: Comparison) -> str:
     lines.append(f"- before: `{', '.join(cmp.before_paths)}`")
     lines.append(f"- after: `{', '.join(cmp.after_paths)}`")
     lines.append(
-        f"- new: {len(cmp.new_failures)} · fixed: {len(cmp.fixed_failures)} · still failing: {len(cmp.still_failing)}"
+        f"- new: {len(cmp.new_failures)} · fixed: {len(cmp.fixed_failures)} · "
+        f"still failing: {len(cmp.still_failing)}"
     )
     for title, failures in (
         ("## New failures", cmp.new_failures),
