@@ -5,6 +5,7 @@ mcp = FastMCP("good-server")
 
 @mcp.tool()
 def echo(text: str) -> str:
+    """Echo the input text back."""
     return text
 
 

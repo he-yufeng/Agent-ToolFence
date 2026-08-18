@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import json
 import os
+import re
 import shlex
 import tempfile
 import time
@@ -237,6 +238,7 @@ def _evaluate_tools(tools: list[ToolSummary]) -> list[Finding]:
             )
         )
 
+    name_counts: dict[str, int] = {}
     for tool in tools:
         if not tool.name.strip():
             findings.append(
@@ -246,6 +248,18 @@ def _evaluate_tools(tools: list[ToolSummary]) -> list[Finding]:
                     message="A tool has an empty name.",
                 )
             )
+        else:
+            name_counts[tool.name] = name_counts.get(tool.name, 0) + 1
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", tool.name):
+                findings.append(
+                    Finding(
+                        code="tool_name_nonportable",
+                        severity="warning",
+                        message="Tool name has characters some providers sanitize away, "
+                        "which breaks round-tripping the call.",
+                        target=tool.name,
+                    )
+                )
         if not tool.has_input_schema:
             findings.append(
                 Finding(
@@ -253,6 +267,25 @@ def _evaluate_tools(tools: list[ToolSummary]) -> list[Finding]:
                     severity="error",
                     message="A tool is missing inputSchema.",
                     target=tool.name,
+                )
+            )
+        if not (tool.description or "").strip():
+            findings.append(
+                Finding(
+                    code="tool_description_missing",
+                    severity="warning",
+                    message="Tool has no description; agents pick tools by reading it.",
+                    target=tool.name,
+                )
+            )
+    for name, count in name_counts.items():
+        if count > 1:
+            findings.append(
+                Finding(
+                    code="duplicate_tool_name",
+                    severity="error",
+                    message=f"{count} tools share the name '{name}'.",
+                    target=name,
                 )
             )
     return findings

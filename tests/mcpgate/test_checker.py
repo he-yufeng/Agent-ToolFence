@@ -9,7 +9,12 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
-from agentci.mcpgate.checker import check_http_server, check_stdio_server
+from agentci.mcpgate.checker import (
+    ToolSummary,
+    _evaluate_tools,
+    check_http_server,
+    check_stdio_server,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -121,3 +126,37 @@ def test_http_url_query_string_stays_out_of_result() -> None:
 
     assert result.command == url.split("?")[0]
     assert "sk-secret" not in str(result.to_dict())
+
+
+def _tool(name: str, description: str | None = "desc", has_schema: bool = True) -> ToolSummary:
+    return ToolSummary(name=name, description=description, has_input_schema=has_schema)
+
+
+def test_evaluate_tools_flags_duplicate_names() -> None:
+    findings = _evaluate_tools([_tool("read_file"), _tool("read_file"), _tool("write_file")])
+
+    dup = [f for f in findings if f.code == "duplicate_tool_name"]
+    assert len(dup) == 1
+    assert dup[0].severity == "error"
+    assert dup[0].target == "read_file"
+
+
+def test_evaluate_tools_flags_nonportable_name() -> None:
+    findings = _evaluate_tools([_tool("Read File")])
+
+    assert any(f.code == "tool_name_nonportable" for f in findings)
+
+
+def test_evaluate_tools_flags_missing_description() -> None:
+    findings = _evaluate_tools(
+        [_tool("read_file", description=None), _tool("ok", description="  ")]
+    )
+
+    desc = [f for f in findings if f.code == "tool_description_missing"]
+    assert {f.target for f in desc} == {"read_file", "ok"}
+
+
+def test_evaluate_tools_clean_tools_produce_no_findings() -> None:
+    findings = _evaluate_tools([_tool("read_file"), _tool("write_file")])
+
+    assert findings == []
